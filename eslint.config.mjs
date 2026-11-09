@@ -6,6 +6,12 @@ import tseslint from "typescript-eslint";
 
 const CLOCK_MESSAGE = "The core reads time only through the Clock port in packages/core/src/clock/clock.ts";
 
+// ! An error passes a cause, so a caller or a test reads what went wrong without parsing the message
+const CAUSE_RULE = {
+	selector: ":matches(NewExpression, CallExpression)[callee.name=/^[A-Z][A-Za-z]*Error$/]:not(:has(Property[key.name='cause']))",
+	message: "Pass { cause } in the error's options: the caught error when rethrowing, or the rejected values as an object",
+};
+
 export default defineConfig(
 	{ ignores: ["**/node_modules/**", "docs/**"] },
 
@@ -103,6 +109,10 @@ export default defineConfig(
 			"object-shorthand": "error",
 			"prefer-template": "error",
 			"prefer-arrow-callback": "error",
+
+			// * Errors
+			"preserve-caught-error": ["error", { requireCatchParameter: true }],
+			"no-restricted-syntax": ["error", CAUSE_RULE],
 		},
 	},
 
@@ -125,6 +135,7 @@ export default defineConfig(
 			"no-restricted-properties": ["error", { object: "Date", property: "now", message: CLOCK_MESSAGE }],
 			"no-restricted-syntax": [
 				"error",
+				CAUSE_RULE,
 				{ selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: CLOCK_MESSAGE },
 				{ selector: "CallExpression[callee.name='Date']", message: CLOCK_MESSAGE },
 			],
