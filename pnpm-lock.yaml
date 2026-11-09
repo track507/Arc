@@ -224,6 +224,19 @@ importers:
         specifier: 'catalog:'
         version: 5.0.5(vite@8.3.6(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/worker:
+    dependencies:
+      '@arc/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(vite@8.3.6(jiti@2.7.0)(yaml@2.9.1))
+
 packages:
 
   '@babel/code-frame@7.29.7':
