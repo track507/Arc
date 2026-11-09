@@ -1,13 +1,17 @@
 packages:
-    - packages/*
-    - drivers/*
-    - tools/*
+  - packages/*
+  - drivers/*
+  - tools/*
 
 allowBuilds:
-    lefthook: true
+  lefthook: true
 
 minimumReleaseAge: 1440
 blockExoticSubdeps: true
 saveExact: true
 engineStrict: true
 pmOnFail: download
+
+catalog:
+  typescript: 6.0.3
+  vitest: 5.0.5
