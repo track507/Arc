@@ -17,3 +17,8 @@ pre-commit:
     - name: markdown
       glob: "*.md"
       run: pnpm exec markdownlint-cli2 {staged_files}
+
+pre-push:
+  jobs:
+    - name: check
+      run: pnpm check

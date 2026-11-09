@@ -12,6 +12,7 @@
 	},
 	"scripts": {
 		"boundaries": "depcruise packages tools --config .dependency-cruiser.mjs",
+		"check": "pnpm run format:check && pnpm run lint && pnpm run lint:md && pnpm run typecheck && pnpm run boundaries && pnpm run test && pnpm run names",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"lint": "eslint .",
