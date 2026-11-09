@@ -11,16 +11,28 @@
 		"pnpm": ">=12.16.1"
 	},
 	"scripts": {
+		"format": "prettier . --write",
+		"format:check": "prettier . --check",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
+		"lint:md": "markdownlint-cli2 \"**/*.md\" \"#**/node_modules\"",
 		"prepare": "lefthook install",
 		"test": "vitest run",
-		"typecheck": "pnpm -r typecheck"
+		"typecheck": "tsc -p . && pnpm -r typecheck"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "21.2.4",
-		"@commitlint/types": "21.2.3",
 		"@commitlint/config-conventional": "21.2.4",
+		"@commitlint/types": "21.2.3",
+		"@eslint/js": "10.0.1",
+		"eslint": "10.13.0",
+		"eslint-plugin-sonarjs": "4.2.2",
+		"globals": "17.13.0",
 		"lefthook": "2.2.2",
+		"markdownlint-cli2": "0.24.0",
+		"prettier": "3.9.10",
 		"typescript": "catalog:",
+		"typescript-eslint": "8.72.0",
 		"vitest": "catalog:"
 	}
 }

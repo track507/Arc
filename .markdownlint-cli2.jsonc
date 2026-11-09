@@ -1,0 +1,4 @@
+{
+	// The working notes under docs/superpowers are untracked scratch, not published documentation
+	"ignores": ["**/node_modules/**", "docs/superpowers/**"],
+}

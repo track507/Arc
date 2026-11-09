@@ -2,3 +2,18 @@ commit-msg:
   jobs:
     - name: commitlint
       run: pnpm exec commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format
+      glob: "*.{ts,mjs,json,jsonc,yml,yaml}"
+      run: pnpm exec prettier --check {staged_files}
+
+    - name: lint
+      glob: "*.{ts,mjs}"
+      run: pnpm exec eslint {staged_files}
+
+    - name: markdown
+      glob: "*.md"
+      run: pnpm exec markdownlint-cli2 {staged_files}
