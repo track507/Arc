@@ -11,6 +11,7 @@
 		"pnpm": ">=12.16.1"
 	},
 	"scripts": {
+		"boundaries": "depcruise packages --config .dependency-cruiser.mjs",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"lint": "eslint .",
@@ -25,6 +26,7 @@
 		"@commitlint/config-conventional": "21.2.4",
 		"@commitlint/types": "21.2.3",
 		"@eslint/js": "10.0.1",
+		"dependency-cruiser": "18.7.0",
 		"eslint": "10.13.0",
 		"eslint-plugin-sonarjs": "4.2.2",
 		"globals": "17.13.0",

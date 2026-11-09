@@ -1,0 +1,52 @@
+// * The boundaries
+// A port is the file names after its folder in packages/core/src, such as clock/clock.ts
+// An entry is src/entry.ts in a package, the one place that package chooses concrete adapters
+
+/** @type {import("dependency-cruiser").IConfiguration} */
+export default {
+	forbidden: [
+		{
+			name: "no-circular",
+			comment: "Modules in a cycle cannot be understood or tested apart",
+			severity: "error",
+			from: {},
+			to: { circular: true },
+		},
+		{
+			name: "core-imports-only-core",
+			comment: "The core holds the policy and does no I/O, so it imports no adapter, no vendor package and no Node module",
+			severity: "error",
+			from: { path: "^packages/core/src/" },
+			to: { pathNot: "^packages/core/src/" },
+		},
+		{
+			name: "port-imports-only-model",
+			comment: "A port is named in the core's own words, so it imports the model and nothing else",
+			severity: "error",
+			from: { path: "^packages/core/src/([^/]+)/\\1\\.ts$" },
+			to: { pathNot: "^packages/core/src/model/" },
+		},
+		{
+			name: "adapters-never-import-the-ui-or-an-entry",
+			comment: "An entry chooses the adapters, so an adapter that reached the UI or an entry would be choosing for itself",
+			severity: "error",
+			from: { path: "^packages/(worker|document)/src/", pathNot: "/src/entry\\.ts$" },
+			to: { path: ["^packages/(element|app)/", "/src/entry\\.ts$"] },
+		},
+		{
+			name: "only-entries-import-another-package",
+			comment: "An entry is the one place a concrete adapter is chosen, so no other file imports another package's source, except the core's",
+			severity: "error",
+			from: { path: "^packages/([^/]+)/src/", pathNot: "/src/entry\\.ts$" },
+			to: { path: "^packages/(?!core/)[^/]+/src/", pathNot: "^packages/$1/src/" },
+		},
+	],
+	options: {
+		doNotFollow: { path: "node_modules" },
+		tsPreCompilationDeps: true,
+		enhancedResolveOptions: {
+			exportsFields: ["exports"],
+			conditionNames: ["import", "default"],
+		},
+	},
+};
