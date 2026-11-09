@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 const CLOCK_MESSAGE = "The core reads time only through the Clock port in packages/core/src/clock/clock.ts";
 
 export default defineConfig(
-	{ ignores: ["**/node_modules/**", "docs/superpowers/**"] },
+	{ ignores: ["**/node_modules/**", "docs/**"] },
 
 	{ ...js.configs.recommended },
 

@@ -1,4 +1,4 @@
 {
-	// The working notes under docs/superpowers are untracked scratch, not published documentation
-	"ignores": ["**/node_modules/**", "docs/superpowers/**"],
+	// The working notes sit in a gitignored folder, and are scratch rather than published documentation
+	"gitignore": true,
 }

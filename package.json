@@ -11,12 +11,13 @@
 		"pnpm": ">=12.16.1"
 	},
 	"scripts": {
-		"boundaries": "depcruise packages --config .dependency-cruiser.mjs",
+		"boundaries": "depcruise packages tools --config .dependency-cruiser.mjs",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
-		"lint:md": "markdownlint-cli2 \"**/*.md\" \"#**/node_modules\"",
+		"lint:md": "markdownlint-cli2 \"**/*.md\"",
+		"names": "node tools/gate/src/cli.ts",
 		"prepare": "lefthook install",
 		"test": "vitest run",
 		"typecheck": "tsc -p . && pnpm -r typecheck"
