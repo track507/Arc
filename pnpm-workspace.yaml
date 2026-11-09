@@ -1,0 +1,13 @@
+packages:
+    - packages/*
+    - drivers/*
+    - tools/*
+
+allowBuilds:
+    lefthook: true
+
+minimumReleaseAge: 1440
+blockExoticSubdeps: true
+saveExact: true
+engineStrict: true
+pmOnFail: download
