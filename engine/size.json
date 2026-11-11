@@ -1,0 +1,10 @@
+{
+	"wasm": {
+		"bytes": 858126,
+		"brotli": 246405
+	},
+	"loader": {
+		"bytes": 9632,
+		"brotli": 3075
+	}
+}
