@@ -3,6 +3,12 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"exports": {
+		".": {
+			"types": "./arc-engine.d.ts",
+			"default": "./dist/arc-engine.mjs"
+		}
+	},
 	"scripts": {
 		"typecheck": "tsc -p ."
 	},

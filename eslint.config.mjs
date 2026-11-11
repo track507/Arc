@@ -13,7 +13,7 @@ const CAUSE_RULE = {
 };
 
 export default defineConfig(
-	{ ignores: ["**/node_modules/**", "docs/**", ".emsdk/**"] },
+	{ ignores: ["**/node_modules/**", "docs/**", ".emsdk/**", "engine/dist/**"] },
 
 	{ ...js.configs.recommended },
 
@@ -48,6 +48,11 @@ export default defineConfig(
 				{ selector: "method", format: ["camelCase"] },
 				{ selector: "property", format: ["camelCase", "PascalCase", "UPPER_CASE"], leadingUnderscore: "allow" },
 				{ selector: "property", modifiers: ["requiresQuotes"], format: null },
+				{
+					selector: ["typeProperty", "typeMethod", "objectLiteralProperty", "objectLiteralMethod"],
+					filter: { regex: "^_arc_[a-z_]+$", match: true },
+					format: null,
+				},
 			],
 
 			// * Explicit return types on exported functions
