@@ -11,7 +11,7 @@
 		"pnpm": ">=12.16.1"
 	},
 	"scripts": {
-		"boundaries": "depcruise packages tools --config .dependency-cruiser.mjs",
+		"boundaries": "depcruise packages tools engine/scripts engine/test --config .dependency-cruiser.mjs",
 		"build:engine": "node engine/scripts/build.ts",
 		"check": "pnpm run format:check && pnpm run lint && pnpm run lint:md && pnpm run typecheck && pnpm run build:engine && pnpm run boundaries && pnpm run test && pnpm run names",
 		"format": "prettier . --write",
