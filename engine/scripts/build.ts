@@ -18,7 +18,18 @@ const SOURCES = [
 	...["quickjs", "libregexp", "libunicode", "cutils", "dtoa"].map((name) => join(engine, "quickjs", `${name}.c`)),
 	join(engine, "src", "arc-engine.c"),
 ];
-const COMPILE = ["-O2", "-D_GNU_SOURCE", "-DNDEBUG", `-DCONFIG_VERSION="${release.version}"`, `-I${join(engine, "quickjs")}`];
+const STACK_LIMIT = 32 * 1024; // the engines stack limit in bytes of the shadow stack
+const STACK_SIZE = 8 * STACK_LIMIT; // shadow stacks size in bytes, 8 x the limit so the check fires before the stacks bottom
+const COMPILE = [
+	"-O2",
+	"-D_GNU_SOURCE",
+	"-DNDEBUG",
+	`-DCONFIG_VERSION="${release.version}"`,
+	// ! The release turns its stack check off under Emscripten, where it cannot see the host's stack, and without it JS_SetMaxStackSize does nothing
+	"-DCONFIG_STACK_CHECK",
+	`-DARC_STACK_LIMIT=${String(STACK_LIMIT)}`,
+	`-I${join(engine, "quickjs")}`,
+];
 const EXPORTS = ["_arc_start", "_arc_input", "_arc_run", "_arc_output", "_arc_output_length"];
 const LINK = [
 	"-O2",
@@ -29,7 +40,8 @@ const LINK = [
 	"-sALLOW_MEMORY_GROWTH",
 	"-sINITIAL_MEMORY=32MB",
 	"-sMAXIMUM_MEMORY=256MB",
-	"-sSTACK_SIZE=4MB",
+	`-sSTACK_SIZE=${String(STACK_SIZE)}`,
+	"-Wl,--stack-first",
 	"-sFILESYSTEM=0",
 	`-sEXPORTED_FUNCTIONS=${EXPORTS.join(",")}`,
 	"-sEXPORTED_RUNTIME_METHODS=HEAPU8",

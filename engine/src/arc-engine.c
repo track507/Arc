@@ -11,6 +11,10 @@
 #include <string.h>
 #include "quickjs.h"
 
+#ifndef ARC_STACK_LIMIT
+#error "ARC_STACK_LIMIT, the engine's stack limit in bytes, comes from engine/scripts/build.ts"
+#endif
+
 // arc owns these return values
 enum
 {
@@ -123,6 +127,7 @@ int arc_start(void)
 	runtime = JS_NewRuntime();
 	if (runtime == NULL)
 		return -1;
+	JS_SetMaxStackSize(runtime, ARC_STACK_LIMIT);
 	context = JS_NewContext(runtime);
 	if (context == NULL)
 		return -2;

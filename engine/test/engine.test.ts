@@ -86,3 +86,29 @@ describe("the engine's C entry points", () => {
 		expect(run(engine, "getter.js", source).parts.slice(0, 2)).toEqual(["Error", ""]);
 	});
 });
+
+describe("the engine's stack limit", () => {
+	it("stops a runaway recursion with a stack overflow the script can catch", () => {
+		const source = "function f() { return f() + 1; } try { f(); } catch (e) { e.name + ': ' + e.message }";
+		expect(run(engine, "deep.js", source)).toEqual({ code: 0, parts: ["InternalError: stack overflow"] });
+	});
+
+	it("answers the next run after a stack overflow", () => {
+		run(engine, "deep.js", "function f() { return f() + 1; } f()");
+		expect(run(engine, "after.js", "1 + 1")).toEqual({ code: 0, parts: ["2"] });
+	});
+
+	it("stops a native recursion that uses much of the host's stack and little of the engine's", () => {
+		const source = "var a = []; for (var i = 0; i < 100000; i++) a = [a]; JSON.stringify(a)";
+		expect(run(engine, "nested.js", source).parts.slice(0, 2)).toEqual(["InternalError", "stack overflow"]);
+	});
+
+	it("stops a parse nested past the limit", () => {
+		const source = "eval('('.repeat(100000) + '1' + ')'.repeat(100000))";
+		expect(run(engine, "parens.js", source).parts.slice(0, 2)).toEqual(["SyntaxError", "stack overflow"]);
+	});
+
+	it("allows a recursion 100 calls deep", () => {
+		expect(run(engine, "hundred.js", "function f(n) { return n === 0 ? 0 : 1 + f(n - 1); } f(100)")).toEqual({ code: 0, parts: ["100"] });
+	});
+});
