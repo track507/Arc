@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ArcEngine } from "@arc/engine";
+import type { ArcEngine, ArcHost } from "@arc/engine";
 import createArcEngine from "@arc/engine";
 
 import { QuickJsRuntime } from "../../src/runtime/quickjs-runtime.ts";
@@ -19,7 +19,8 @@ interface Fake {
 const INPUT = 1024;
 const OUTPUT = 32_768;
 const ANSWER: Reply = { code: 0, fields: ["2"] };
-const LIMITS = { memory: 16 * 1024 * 1024 };
+const LIMITS = { memory: 16 * 1024 * 1024, time: 100 };
+const STILL = (): number => 0;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -57,24 +58,23 @@ function fake(answer: (source: string) => Reply, options: { readonly start?: num
 }
 
 async function runtimeOn(engine: ArcEngine): Promise<QuickJsRuntime> {
-	return QuickJsRuntime.create(async () => Promise.resolve(engine), LIMITS);
+	return QuickJsRuntime.create(async () => Promise.resolve(engine), LIMITS, STILL);
 }
 
 describe("QuickJsRuntime on the engine built from the release", () => {
 	it("returns a script's value as its text", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "sum.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
 	});
 
 	it("keeps the global scope from one run to the next", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
-
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		await runtime.run({ name: "first.js", source: "var level = 40" });
 		expect(await runtime.run({ name: "second.js", source: "level + 2" })).toEqual({ kind: "value", text: "42" });
 	});
 
 	it("reports an error by its name, its message and a stack that names the script, and answers the next run", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "field.js", source: "null.x" })).toEqual({
 			kind: "error",
 			name: "TypeError",
@@ -85,24 +85,24 @@ describe("QuickJsRuntime on the engine built from the release", () => {
 	});
 
 	it("carries characters outside ASCII in the source, the value and the script's name", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "text.js", source: "'\u00E9' + '\u{1F600}'" })).toEqual({ kind: "value", text: "\u00E9\u{1F600}" });
 		expect(await runtime.run({ name: "fich\u00E9.js", source: "null.x" })).toMatchObject({ stack: expect.stringContaining("fich\u00E9.js") as string });
 	});
 
 	it("turns a lone surrogate into replacement characters on the way in and on the way out", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "in.js", source: "'\uD800'" })).toEqual({ kind: "value", text: "\uFFFD" });
 		expect(await runtime.run({ name: "out.js", source: "'\\uD800'" })).toEqual({ kind: "value", text: "\uFFFD\uFFFD\uFFFD" });
 	});
 
 	it("runs a source far longer than the engine's first input buffer", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "long.js", source: `'${"\u00E9".repeat(100_000)}'.length` })).toEqual({ kind: "value", text: "100000" });
 	});
 
 	it("reports a run that passes its memory limit as an error, and answers the next run", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, STILL);
 		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push(new ArrayBuffer(1 << 20))" })).toEqual({
 			kind: "error",
 			name: "InternalError",
@@ -113,9 +113,24 @@ describe("QuickJsRuntime on the engine built from the release", () => {
 	});
 
 	it("is dead once a run fills the memory maximum and the engine can answer nothing after it", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine, { memory: 2 ** 32 - 1 });
+		const runtime = await QuickJsRuntime.create(createArcEngine, { memory: 2 ** 32 - 1, time: LIMITS.time }, STILL);
 		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push({})" })).toEqual({ kind: "dead" });
 		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "dead" });
+	});
+
+	it("ends a script that passes its time limit with a timeout, and answers the next run", async () => {
+		let now = 0;
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, () => (now += 1));
+		expect(await runtime.run({ name: "loop.js", source: "for (var i = 0; i < 1e6; i++) {} i" })).toEqual({ kind: "timeout" });
+		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
+	});
+
+	it("gives each run a deadline of its own", async () => {
+		let now = 0;
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS, () => now);
+		await runtime.run({ name: "first.js", source: "1 + 1" });
+		now = 1000;
+		expect(await runtime.run({ name: "loop.js", source: "for (var i = 0; i < 1e6; i++) {} i" })).toEqual({ kind: "value", text: "1000000" });
 	});
 });
 
@@ -128,9 +143,48 @@ describe("QuickJsRuntime when the engine fails", () => {
 				made += 1;
 				return Promise.resolve(engine);
 			};
-			await expect(QuickJsRuntime.create(factory, { memory })).rejects.toThrow(expect.objectContaining({ name: "RangeError", cause: { memory } }));
+			await expect(QuickJsRuntime.create(factory, { memory, time: LIMITS.time }, STILL)).rejects.toThrow(
+				expect.objectContaining({ name: "RangeError", cause: { memory } })
+			);
 			expect({ made, sources }).toEqual({ made: 0, sources: [] });
 		}
+	});
+
+	it("refuses a time limit that is not above 0, before it makes an engine", async () => {
+		for (const time of [0, -1, Number.NaN]) {
+			let made = 0;
+			const factory = async (): Promise<ArcEngine> => {
+				made += 1;
+				return Promise.resolve(fake(() => ANSWER).engine);
+			};
+			await expect(QuickJsRuntime.create(factory, { memory: LIMITS.memory, time }, STILL)).rejects.toThrow(
+				expect.objectContaining({ name: "RangeError", cause: { time } })
+			);
+			expect(made).toBe(0);
+		}
+	});
+
+	it("tells the engine to stop once the stopwatch passes the run's deadline, and not before", async () => {
+		let now = 0;
+		let host: ArcHost | undefined;
+		const answers: boolean[] = [];
+		const { engine } = fake(() => {
+			for (const at of [99, 100, 101]) {
+				now = at;
+				answers.push(host?.arcShouldStop() ?? false);
+			}
+			return ANSWER;
+		});
+		const runtime = await QuickJsRuntime.create(
+			async (given) => {
+				host = given;
+				return Promise.resolve(engine);
+			},
+			LIMITS,
+			() => now
+		);
+		await runtime.run({ name: "x.js", source: "x()" });
+		expect(answers).toEqual([false, false, true]);
 	});
 
 	it("passes its memory limit to the engine", async () => {
@@ -167,6 +221,13 @@ describe("QuickJsRuntime when the engine fails", () => {
 		expect(await runtime.run({ name: "next.js", source: "1 + 1" })).toEqual({ kind: "dead" });
 	});
 
+	it("reports a timeout when the engine passes the check that follows it", async () => {
+		const { engine, sources } = fake((source) => (source === "1 + 1" ? ANSWER : { code: 3, fields: [] }));
+		const runtime = await runtimeOn(engine);
+		expect(await runtime.run({ name: "loop.js", source: "loop()" })).toEqual({ kind: "timeout" });
+		expect(sources).toEqual(["loop()", "1 + 1"]);
+	});
+
 	it("reports an outcome the engine could not write as out of memory while the engine still answers", async () => {
 		const { engine } = fake((source) => (source === "1 + 1" ? ANSWER : { code: 2, fields: [] }));
 		const runtime = await runtimeOn(engine);
@@ -183,6 +244,7 @@ describe("QuickJsRuntime when the engine fails", () => {
 			{ code: 7, fields: ["2"] },
 			{ code: 0, fields: ["2", "3"] },
 			{ code: 1, fields: ["TypeError"] },
+			{ code: 3, fields: ["interrupted"] },
 		]) {
 			const runtime = await runtimeOn(fake(() => reply).engine);
 			expect(await runtime.run({ name: "x.js", source: "x()" })).toEqual({ kind: "dead" });

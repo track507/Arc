@@ -38,4 +38,11 @@ describe("chooseRuntime", () => {
 		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push({})" })).toMatchObject({ kind: "error" });
 		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
 	});
+
+	it("measures each run's deadline on performance.now", async () => {
+		const runtime = await chooseRuntime();
+		const reads = vi.spyOn(performance, "now");
+		await runtime.run({ name: "loop.js", source: "for (var i = 0; i < 1e6; i++) {} i" });
+		expect(reads.mock.calls.length).toBeGreaterThan(100);
+	});
 });

@@ -29,9 +29,11 @@ function run(engine: ArcEngine, name: string, source: string): Raw {
 }
 
 let engine: ArcEngine;
+let stopping = false;
 
 beforeEach(async () => {
-	engine = await createArcEngine();
+	stopping = false;
+	engine = await createArcEngine({ arcShouldStop: () => stopping });
 	expect(engine._arc_start(MEMORY_LIMIT)).toBe(0);
 });
 
@@ -158,7 +160,42 @@ describe("the engine's memory limit", () => {
 	});
 
 	it("reports a limit too small for the context", async () => {
-		const small = await createArcEngine();
+		const small = await createArcEngine({ arcShouldStop: () => false });
 		expect(small._arc_start(64 * 1024)).toBe(-2);
+	});
+});
+
+describe("the engine's interrupt", () => {
+	it("lets a long loop finish while the host says the run has time left", () => {
+		expect(run(engine, "loop.js", "for (var i = 0; i < 1e6; i++) {} i")).toEqual({ code: 0, parts: ["1000000"] });
+	});
+
+	it("stops a long loop once the host says the run has passed its deadline", () => {
+		stopping = true;
+		expect(run(engine, "loop.js", "for (var i = 0; i < 1e6; i++) {} i")).toEqual({ code: 3, parts: [] });
+	});
+
+	it("stops a long loop that the script wraps in catch and finally", () => {
+		stopping = true;
+		const source = "try { for (var i = 0; i < 1e6; i++) {} } catch (e) { 'caught' } finally { 'finally' }";
+		expect(run(engine, "caught.js", source)).toEqual({ code: 3, parts: [] });
+	});
+
+	it("stops a long loop inside the value's own text", () => {
+		stopping = true;
+		const source = "({ toString() { for (var i = 0; i < 1e6; i++) {} return 'done'; } })";
+		expect(run(engine, "text.js", source)).toEqual({ code: 3, parts: [] });
+	});
+
+	it("stops a regular expression that backtracks", () => {
+		stopping = true;
+		expect(run(engine, "regexp.js", "/(a+)+$/.test('a'.repeat(20) + 'b')")).toEqual({ code: 3, parts: [] });
+	});
+
+	it("reports the next run's error as an error after a timeout", () => {
+		stopping = true;
+		run(engine, "loop.js", "for (var i = 0; i < 1e6; i++) {} i");
+		stopping = false;
+		expect(run(engine, "field.js", "null.x").code).toBe(1);
 	});
 });

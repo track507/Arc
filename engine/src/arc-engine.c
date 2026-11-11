@@ -6,6 +6,7 @@
 // js side writes a script into the input buffer, calls arc_run, and reads the outcome from the output buffer
 // the outcome is a list of fields, each a 4 byte little endian length and that many bytes of UTF-8 since a JS string can hold a nul char
 
+#include <emscripten/em_js.h>
 #include <malloc.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,11 +23,13 @@ enum
 	ARC_VALUE = 0,
 	ARC_ERROR = 1,
 	ARC_UNREADABLE = 2,
+	ARC_TIMEOUT = 3,
 };
 
 static JSRuntime *runtime;
 static JSContext *context;
 static size_t memory_limit;
+static int timed_out;
 
 // both of these buffers live as long as the instance, so they grow and are never freed
 static char *input;
@@ -186,6 +189,27 @@ static void *limited_realloc(JSMallocState *state, void *block, size_t size)
 
 static const JSMallocFunctions allocator = {limited_malloc, limited_free, limited_realloc, block_size};
 
+// * The deadline
+// ? The JavaScript side keeps the run's deadline and hands this answer to the loader as arcShouldStop, which becomes a property of the module
+
+EM_JS(int, arc_host_should_stop, (), { return Module["arcShouldStop"]() ? 1 : 0; }); // asks the js side whether the current run passed its deadline
+
+/**
+ * Stops the run once the JavaScript side says it has passed its deadline, and records that the stop was a timeout
+ *
+ * ? QuickJS calls it once every JS_INTERRUPT_COUNTER_INIT jumps and calls, 10,000 in the release, and the regular expression engine calls it while it backtracks
+ * ? Returning 1 makes QuickJS throw InternalError: interrupted, which no catch or finally block in the script can stop
+ */
+static int interrupt(JSRuntime *rt, void *opaque)
+{
+	(void)rt;
+	(void)opaque;
+	if (!arc_host_should_stop())
+		return 0;
+	timed_out = 1;
+	return 1;
+}
+
 /**
  * Creates the runtime and its context under a memory limit in bytes, and returns 0, or a negative number naming the one that could not be made
  *
@@ -200,6 +224,7 @@ int arc_start(uint32_t limit)
 	memory_limit = limit;
 	JS_SetMemoryLimit(runtime, memory_limit);
 	JS_SetMaxStackSize(runtime, ARC_STACK_LIMIT);
+	JS_SetInterruptHandler(runtime, interrupt, NULL);
 	context = JS_NewContext(runtime);
 	if (context == NULL)
 		return -2;
@@ -213,6 +238,7 @@ char *arc_input(uint32_t size)
 }
 
 // Run the script in the input buffer as a global script and write its output to the output buffer
+// returns 0 for a value, 1 for an error, 2 for an outcome that couldnt be written, and  3 for a timeout
 // the input holds nul byte, source, and another nul byte since JS_Eval needs to be terminated
 // The source may hold nul chars of its own bc its lenght is passed
 int arc_run(uint32_t name_length, uint32_t source_length)
@@ -220,6 +246,7 @@ int arc_run(uint32_t name_length, uint32_t source_length)
 	const char *name = input;
 	const char *source = input + name_length + 1;
 	output_length = 0;
+	timed_out = 0;
 	JSValue result = JS_Eval(context, source, source_length, name, JS_EVAL_TYPE_GLOBAL);
 	if (!JS_IsException(result))
 	{
@@ -233,6 +260,11 @@ int arc_run(uint32_t name_length, uint32_t source_length)
 			return written ? ARC_VALUE : ARC_UNREADABLE;
 		}
 		// ? Making the value's text threw, as a Symbol's does, so the run ends with that error
+	}
+	if (timed_out)
+	{
+		drop_exception();
+		return ARC_TIMEOUT;
 	}
 	// ? An error raised at the memory limit leaves no room under it to read the error's text, so the limit is lifted for the read and only the memory maximum bounds it
 	JS_SetMemoryLimit(runtime, SIZE_MAX);

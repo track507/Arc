@@ -14,5 +14,15 @@ export interface ArcEngine {
 	readonly _arc_output_length: () => number;
 }
 
-/** Instantiates a fresh engine, with its own memory */
-export default function createArcEngine(): Promise<ArcEngine>;
+/** What the engine asks the JavaScript side while a run goes on */
+export interface ArcHost {
+	/** Answers whether the current run has passed its deadline, which the engine asks once every 10,000 jumps and calls */
+	readonly arcShouldStop: () => boolean;
+}
+
+/**
+ * Instantiates a fresh engine, with its own memory, that asks the host while a run goes on
+ *
+ * ! The loader writes the engine's exports onto the host object and resolves to it, so each engine needs a host object of its own
+ */
+export default function createArcEngine(host: ArcHost): Promise<ArcEngine>;

@@ -9,8 +9,9 @@ import { QuickJsRuntime } from "./runtime/quickjs-runtime.ts";
  *
  * ? The memory limit is three quarters of the engine's 256 MiB memory maximum, so a runaway script meets the limit's catchable error first and the engine keeps room to answer after it
  * ? The reference sheet's whole session, measured at 105.7 MiB of wasm memory, fits under it
+ * ? The time limit of 30 s a run stops a runaway script, and is not a budget a sheet is expected to come near
  */
-const LIMITS: EngineLimits = { memory: 192 * 1024 * 1024 };
+const LIMITS: EngineLimits = { memory: 192 * 1024 * 1024, time: 30_000 };
 
 /**
  * Chooses the clock the engine runs on
@@ -23,5 +24,5 @@ export function chooseClock(): Clock {
 }
 
 export async function chooseRuntime(): Promise<ScriptRuntime> {
-	return QuickJsRuntime.create(createArcEngine, LIMITS);
+	return QuickJsRuntime.create(createArcEngine, LIMITS, () => performance.now());
 }

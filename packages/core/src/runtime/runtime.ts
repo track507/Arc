@@ -9,11 +9,13 @@ export interface Script {
  *
  * - value: the script finished, and text is its completion value as String() gives it
  * - error: the script threw, and the fields are the thrown value's own, empty where it has none
+ * - timeout: the script ran past the runtime's time limit and was stopped, and the runtime runs the next script
  * - dead: the runtime can run nothing more, and the caller creates a new one
  */
 export type RunOutcome =
 	| { readonly kind: "value"; readonly text: string }
 	| { readonly kind: "error"; readonly name: string; readonly message: string; readonly stack: string }
+	| { readonly kind: "timeout" }
 	| { readonly kind: "dead" };
 
 /**
