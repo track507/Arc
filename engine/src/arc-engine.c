@@ -6,6 +6,7 @@
 // js side writes a script into the input buffer, calls arc_run, and reads the outcome from the output buffer
 // the outcome is a list of fields, each a 4 byte little endian length and that many bytes of UTF-8 since a JS string can hold a nul char
 
+#include <malloc.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,7 @@ enum
 
 static JSRuntime *runtime;
 static JSContext *context;
+static size_t memory_limit;
 
 // both of these buffers live as long as the instance, so they grow and are never freed
 static char *input;
@@ -121,12 +123,82 @@ static int write_error(void)
 	return written;
 }
 
-// create the actual runtime and its context and returns 0, or a neg number naming on that couldnt be made
-int arc_start(void)
+// * The allocator
+// ? The release's allocator counts each block at the size malloc_usable_size reports, but under Emscripten it takes that size as 0, so its memory limit sees only 8 bytes a block
+// ? Emscripten's malloc does report a block's size, so these are the release's allocator functions with that size put back
+// ? quickjs/quickjs.c, js_def_malloc_usable_size, and Emscripten's system/lib/dlmalloc.c, malloc_usable_size
+
+/** What malloc spends on a block beyond its usable size, as the release's allocator counts it */
+#define BLOCK_OVERHEAD 8
+
+/** A block's usable size, which malloc may round up from the size asked for */
+static size_t block_size(const void *block)
 {
-	runtime = JS_NewRuntime();
+	return malloc_usable_size((void *)block);
+}
+
+/**
+ * Allocates a block, or returns NULL when it would take the runtime past its memory limit
+ *
+ * ? JS_NewRuntime2 leaves the limit to the allocator, so this repeats the release allocator's test
+ */
+static void *limited_malloc(JSMallocState *state, size_t size)
+{
+	if (state->malloc_size + size > state->malloc_limit)
+		return NULL;
+	void *block = malloc(size);
+	if (block == NULL)
+		return NULL;
+	state->malloc_count++;
+	state->malloc_size += block_size(block) + BLOCK_OVERHEAD;
+	return block;
+}
+
+/** Frees a block and takes its size off the runtime's count */
+static void limited_free(JSMallocState *state, void *block)
+{
+	if (block == NULL)
+		return;
+	state->malloc_count--;
+	state->malloc_size -= block_size(block) + BLOCK_OVERHEAD;
+	free(block);
+}
+
+/** Resizes a block, or returns NULL and leaves the block as it was when the new size would take the runtime past its memory limit */
+static void *limited_realloc(JSMallocState *state, void *block, size_t size)
+{
+	if (block == NULL)
+		return size == 0 ? NULL : limited_malloc(state, size);
+	if (size == 0)
+	{
+		limited_free(state, block);
+		return NULL;
+	}
+	size_t old_size = block_size(block);
+	if (state->malloc_size + size - old_size > state->malloc_limit)
+		return NULL;
+	void *resized = realloc(block, size);
+	if (resized == NULL)
+		return NULL;
+	state->malloc_size += block_size(resized) - old_size;
+	return resized;
+}
+
+static const JSMallocFunctions allocator = {limited_malloc, limited_free, limited_realloc, block_size};
+
+/**
+ * Creates the runtime and its context under a memory limit in bytes, and returns 0, or a negative number naming the one that could not be made
+ *
+ * A limit of UINT32_MAX is SIZE_MAX in wasm32, which leaves only the memory maximum
+ * The stack limit counts from where the runtime is created, which is where every later run starts too, since each call comes straight from JavaScript
+ */
+int arc_start(uint32_t limit)
+{
+	runtime = JS_NewRuntime2(&allocator, NULL);
 	if (runtime == NULL)
 		return -1;
+	memory_limit = limit;
+	JS_SetMemoryLimit(runtime, memory_limit);
 	JS_SetMaxStackSize(runtime, ARC_STACK_LIMIT);
 	context = JS_NewContext(runtime);
 	if (context == NULL)
@@ -162,7 +234,11 @@ int arc_run(uint32_t name_length, uint32_t source_length)
 		}
 		// ? Making the value's text threw, as a Symbol's does, so the run ends with that error
 	}
-	return write_error() ? ARC_ERROR : ARC_UNREADABLE;
+	// ? An error raised at the memory limit leaves no room under it to read the error's text, so the limit is lifted for the read and only the memory maximum bounds it
+	JS_SetMemoryLimit(runtime, SIZE_MAX);
+	int written = write_error();
+	JS_SetMemoryLimit(runtime, memory_limit);
+	return written ? ARC_ERROR : ARC_UNREADABLE;
 }
 
 // Every run overrides the previous

@@ -3,6 +3,19 @@ import type { ArcEngine } from "@arc/engine";
 
 export type EngineFactory = () => Promise<ArcEngine>;
 
+/** The limits the engine holds every run to, which the entry chooses */
+export interface EngineLimits {
+	/**
+	 * The most bytes the engine's blocks may hold, past which an allocation fails with InternalError: out of memory
+	 *
+	 * ? A whole number from 0 to 2 ** 32 - 1, since wasm32 counts memory in 32 bits, and 2 ** 32 - 1 sets no limit and leaves only the memory maximum
+	 */
+	readonly memory: number;
+}
+
+/** The largest memory limit the engine takes, which is SIZE_MAX in wasm32 */
+const LARGEST_MEMORY_LIMIT = 2 ** 32 - 1;
+
 const ARC_VALUE = 0;
 const ARC_ERROR = 1;
 const ARC_UNREADABLE = 2;
@@ -32,11 +45,19 @@ export class QuickJsRuntime implements ScriptRuntime {
 	/**
 	 * Instantiates an engine and starts its runtime
 	 *
+	 * ! A number outside the engine's range would wrap silently on its way into wasm, so it is refused before an engine is made
+	 * @throws RangeError when the memory limit is not a whole number from 0 to 2 ** 32 - 1; its cause is `{ memory }`
 	 * @throws Error when the engine cannot create its runtime or its context; its cause is `{ code }`, the code arc_start returned
 	 */
-	static async create(factory: EngineFactory): Promise<QuickJsRuntime> {
+	static async create(factory: EngineFactory, limits: EngineLimits): Promise<QuickJsRuntime> {
+		const { memory } = limits;
+		if (!Number.isInteger(memory) || memory < 0 || memory > LARGEST_MEMORY_LIMIT) {
+			throw new RangeError(`The memory limit must be a whole number of bytes from 0 to ${String(LARGEST_MEMORY_LIMIT)}, and was ${String(memory)}`, {
+				cause: { memory },
+			});
+		}
 		const engine = await factory();
-		const code = engine._arc_start();
+		const code = engine._arc_start(memory);
 		if (code !== 0) throw new Error(`The engine could not start its runtime, arc_start returned ${String(code)}`, { cause: { code } });
 		return new QuickJsRuntime(engine);
 	}

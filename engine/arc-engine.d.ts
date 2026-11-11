@@ -2,8 +2,8 @@
 export interface ArcEngine {
 	/** The instance's memory as bytes; the view is replaced when the memory grows, so it is read again after every call */
 	readonly HEAPU8: Uint8Array;
-	/** Creates the runtime and its context, and returns 0, or a negative number when one cannot be made */
-	readonly _arc_start: () => number;
+	/** Creates the runtime and its context under a memory limit in bytes, and returns 0, or a negative number when one cannot be made */
+	readonly _arc_start: (memoryLimit: number) => number;
 	/** Returns the address of an input buffer of at least `size` bytes, or 0 when memory runs out */
 	readonly _arc_input: (size: number) => number;
 	/** Runs the input as a global script, and returns 0 for a value, 1 for an error and 2 when the outcome could not be written */

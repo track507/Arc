@@ -32,4 +32,10 @@ describe("chooseRuntime", () => {
 		const runtime = await chooseRuntime();
 		expect(await runtime.run({ name: "sum.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
 	});
+
+	it("holds a runaway script to a memory limit, so a flood of objects leaves the runtime answering", async () => {
+		const runtime = await chooseRuntime();
+		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push({})" })).toMatchObject({ kind: "error" });
+		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
+	});
 });

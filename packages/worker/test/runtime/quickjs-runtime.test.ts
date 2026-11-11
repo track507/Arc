@@ -13,11 +13,13 @@ interface Reply {
 interface Fake {
 	readonly engine: ArcEngine;
 	readonly sources: string[];
+	readonly limits: number[];
 }
 
 const INPUT = 1024;
 const OUTPUT = 32_768;
 const ANSWER: Reply = { code: 0, fields: ["2"] };
+const LIMITS = { memory: 16 * 1024 * 1024 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -25,10 +27,14 @@ function fake(answer: (source: string) => Reply, options: { readonly start?: num
 	const heap = new Uint8Array(65_536);
 	const view = new DataView(heap.buffer);
 	const sources: string[] = [];
+	const limits: number[] = [];
 	let outputLength = 0;
 	const engine: ArcEngine = {
 		HEAPU8: heap,
-		_arc_start: () => options.start ?? 0,
+		_arc_start: (memoryLimit) => {
+			limits.push(memoryLimit);
+			return options.start ?? 0;
+		},
 		_arc_input: () => options.input ?? INPUT,
 		_arc_run: (nameLength, sourceLength) => {
 			const source = decoder.decode(heap.subarray(INPUT + nameLength + 1, INPUT + nameLength + 1 + sourceLength));
@@ -47,27 +53,28 @@ function fake(answer: (source: string) => Reply, options: { readonly start?: num
 		_arc_output: () => OUTPUT,
 		_arc_output_length: () => outputLength,
 	};
-	return { engine, sources };
+	return { engine, sources, limits };
 }
 
 async function runtimeOn(engine: ArcEngine): Promise<QuickJsRuntime> {
-	return QuickJsRuntime.create(async () => Promise.resolve(engine));
+	return QuickJsRuntime.create(async () => Promise.resolve(engine), LIMITS);
 }
 
 describe("QuickJsRuntime on the engine built from the release", () => {
 	it("returns a script's value as its text", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
 		expect(await runtime.run({ name: "sum.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
 	});
 
 	it("keeps the global scope from one run to the next", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+
 		await runtime.run({ name: "first.js", source: "var level = 40" });
 		expect(await runtime.run({ name: "second.js", source: "level + 2" })).toEqual({ kind: "value", text: "42" });
 	});
 
 	it("reports an error by its name, its message and a stack that names the script, and answers the next run", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
 		expect(await runtime.run({ name: "field.js", source: "null.x" })).toEqual({
 			kind: "error",
 			name: "TypeError",
@@ -78,24 +85,60 @@ describe("QuickJsRuntime on the engine built from the release", () => {
 	});
 
 	it("carries characters outside ASCII in the source, the value and the script's name", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
 		expect(await runtime.run({ name: "text.js", source: "'\u00E9' + '\u{1F600}'" })).toEqual({ kind: "value", text: "\u00E9\u{1F600}" });
 		expect(await runtime.run({ name: "fich\u00E9.js", source: "null.x" })).toMatchObject({ stack: expect.stringContaining("fich\u00E9.js") as string });
 	});
 
 	it("turns a lone surrogate into replacement characters on the way in and on the way out", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
 		expect(await runtime.run({ name: "in.js", source: "'\uD800'" })).toEqual({ kind: "value", text: "\uFFFD" });
 		expect(await runtime.run({ name: "out.js", source: "'\\uD800'" })).toEqual({ kind: "value", text: "\uFFFD\uFFFD\uFFFD" });
 	});
 
 	it("runs a source far longer than the engine's first input buffer", async () => {
-		const runtime = await QuickJsRuntime.create(createArcEngine);
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
 		expect(await runtime.run({ name: "long.js", source: `'${"\u00E9".repeat(100_000)}'.length` })).toEqual({ kind: "value", text: "100000" });
+	});
+
+	it("reports a run that passes its memory limit as an error, and answers the next run", async () => {
+		const runtime = await QuickJsRuntime.create(createArcEngine, LIMITS);
+		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push(new ArrayBuffer(1 << 20))" })).toEqual({
+			kind: "error",
+			name: "InternalError",
+			message: "out of memory",
+			stack: expect.stringContaining("flood.js") as string,
+		});
+		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
+	});
+
+	it("is dead once a run fills the memory maximum and the engine can answer nothing after it", async () => {
+		const runtime = await QuickJsRuntime.create(createArcEngine, { memory: 2 ** 32 - 1 });
+		expect(await runtime.run({ name: "flood.js", source: "var keep = []; for (;;) keep.push({})" })).toEqual({ kind: "dead" });
+		expect(await runtime.run({ name: "after.js", source: "1 + 1" })).toEqual({ kind: "dead" });
 	});
 });
 
 describe("QuickJsRuntime when the engine fails", () => {
+	it("refuses a memory limit that would wrap on its way into wasm, before it makes an engine", async () => {
+		for (const memory of [-1, 1.5, 2 ** 32]) {
+			const { engine, sources } = fake(() => ANSWER);
+			let made = 0;
+			const factory = async (): Promise<ArcEngine> => {
+				made += 1;
+				return Promise.resolve(engine);
+			};
+			await expect(QuickJsRuntime.create(factory, { memory })).rejects.toThrow(expect.objectContaining({ name: "RangeError", cause: { memory } }));
+			expect({ made, sources }).toEqual({ made: 0, sources: [] });
+		}
+	});
+
+	it("passes its memory limit to the engine", async () => {
+		const { engine, limits } = fake(() => ANSWER);
+		await runtimeOn(engine);
+		expect(limits).toEqual([LIMITS.memory]);
+	});
+
 	it("creates no runtime when the engine cannot start, with the code it returned as the cause", async () => {
 		await expect(runtimeOn(fake(() => ANSWER, { start: -2 }).engine)).rejects.toThrow(expect.objectContaining({ name: "Error", cause: { code: -2 } }));
 	});

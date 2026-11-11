@@ -8,6 +8,7 @@ interface Raw {
 	readonly parts: readonly string[];
 }
 
+const MEMORY_LIMIT = 16 * 1024 * 1024;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -31,7 +32,7 @@ let engine: ArcEngine;
 
 beforeEach(async () => {
 	engine = await createArcEngine();
-	expect(engine._arc_start()).toBe(0);
+	expect(engine._arc_start(MEMORY_LIMIT)).toBe(0);
 });
 
 describe("the engine's C entry points", () => {
@@ -110,5 +111,54 @@ describe("the engine's stack limit", () => {
 
 	it("allows a recursion 100 calls deep", () => {
 		expect(run(engine, "hundred.js", "function f(n) { return n === 0 ? 0 : 1 + f(n - 1); } f(100)")).toEqual({ code: 0, parts: ["100"] });
+	});
+});
+
+describe("the engine's memory limit", () => {
+	it("stops a runaway allocation with an out of memory error the script can catch", () => {
+		const source = "var a = []; try { for (;;) a.push(new ArrayBuffer(1 << 20)); } catch (e) { a = null; e.name + ': ' + e.message }";
+		expect(run(engine, "flood.js", source)).toEqual({ code: 0, parts: ["InternalError: out of memory"] });
+	});
+
+	it("counts every block at its real size, so the wasm memory stays within twice the limit", () => {
+		run(engine, "flood.js", "var head = null; for (;;) head = { next: head }");
+		expect(engine.HEAPU8.byteLength).toBeLessThanOrEqual(2 * MEMORY_LIMIT);
+	});
+
+	it("counts a block that grows, so one growing array stays within twice the limit", () => {
+		run(engine, "grow.js", "var a = []; for (;;) a.push(0)");
+		expect(engine.HEAPU8.byteLength).toBeLessThanOrEqual(2 * MEMORY_LIMIT);
+	});
+
+	it("takes a freed block off the count, so a run may allocate far more than the limit over its life", () => {
+		const source = "var total = 0; for (var i = 0; i < 64; i++) total += new ArrayBuffer(1 << 20).byteLength; total";
+		expect(run(engine, "churn.js", source)).toEqual({ code: 0, parts: ["67108864"] });
+	});
+
+	it("runs the cycle collector from the count, so a run that drops many cycles stays within twice the limit", () => {
+		const source = "for (var i = 0; i < 2000000; i++) { var a = {}; var b = { a: a }; a.b = b; } i";
+		expect(run(engine, "cycles.js", source)).toEqual({ code: 0, parts: ["2000000"] });
+		expect(engine.HEAPU8.byteLength).toBeLessThanOrEqual(2 * MEMORY_LIMIT);
+	});
+
+	it("puts the limit back after it reads an error", () => {
+		run(engine, "error.js", "null.x");
+		run(engine, "flood.js", "var head = null; for (;;) head = { next: head }");
+		expect(engine.HEAPU8.byteLength).toBeLessThanOrEqual(2 * MEMORY_LIMIT);
+	});
+
+	it("ends a run that passes the limit with an error, and answers the next run", () => {
+		expect(run(engine, "flood.js", "var keep = []; for (;;) keep.push({})").code).toBe(1);
+		expect(run(engine, "after.js", "1 + 1")).toEqual({ code: 0, parts: ["2"] });
+	});
+
+	it("reads an error in full while the script holds memory at the limit", () => {
+		const source = "var e = new Error('\u00E9'.repeat(100000)); var keep = []; try { for (;;) keep.push({}); } catch (x) {} throw e";
+		expect(run(engine, "held.js", source).parts[1]).toBe("\u00E9".repeat(100_000));
+	});
+
+	it("reports a limit too small for the context", async () => {
+		const small = await createArcEngine();
+		expect(small._arc_start(64 * 1024)).toBe(-2);
 	});
 });
