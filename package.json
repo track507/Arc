@@ -20,6 +20,7 @@
 		"lint:md": "markdownlint-cli2 \"**/*.md\"",
 		"names": "node tools/gate/src/cli.ts",
 		"prepare": "lefthook install",
+		"setup:engine": "node engine/scripts/setup.ts",
 		"test": "vitest run",
 		"typecheck": "tsc -p . && pnpm -r typecheck"
 	},

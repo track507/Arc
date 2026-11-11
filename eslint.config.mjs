@@ -13,7 +13,7 @@ const CAUSE_RULE = {
 };
 
 export default defineConfig(
-	{ ignores: ["**/node_modules/**", "docs/**"] },
+	{ ignores: ["**/node_modules/**", "docs/**", ".emsdk/**"] },
 
 	{ ...js.configs.recommended },
 
