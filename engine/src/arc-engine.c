@@ -1,8 +1,8 @@
-// Just a forewarning, Im not a C programmer
-// The closest thing I've done to this in C++ and recently some rust stuff so bear with me here
+// Just a forewarning, I'm not a C programmer
+// The closest thing I've done to this is C++ and recently some Rust stuff, so bear with me here
 
-// * Arc's engine: the one palce the C side of the engine is wired
-// a wasm instance holds on quickjs runtime and one context, and a new runtime is a enw instance with fresh memory
+// * Arc's engine: the one place the C side of the engine is wired
+// a wasm instance holds one quickjs runtime and one context, and a new runtime is a new instance with fresh memory
 // js side writes a script into the input buffer, calls arc_run, and reads the outcome from the output buffer
 // the outcome is a list of fields, each a 4 byte little endian length and that many bytes of UTF-8 since a JS string can hold a nul char
 
@@ -38,7 +38,7 @@ static char *output;
 static uint32_t output_capacity;
 static uint32_t output_length;
 
-// grow a buffer to hold at least size byte and keep its contents
+// grow a buffer to hold at least size bytes and keep its contents
 static int reserve(char **buffer, uint32_t *capacity, uint32_t size)
 {
 	if (size <= *capacity)
@@ -62,7 +62,7 @@ static int reserve(char **buffer, uint32_t *capacity, uint32_t size)
 	return 1;
 }
 
-// appends one field, its lenght, and its bytes, and returns 0 when memory runs out
+// appends one field, its length, and its bytes, and returns 0 when memory runs out
 static int write_field(const char *bytes, size_t length)
 {
 	if (length > UINT32_MAX / 4 || !reserve(&output, &output_capacity, output_length + 4 + (uint32_t)length))
@@ -82,7 +82,7 @@ static void drop_exception(void)
 	JS_FreeValue(context, JS_GetException(context));
 }
 
-// append a values text as a field, or empty field when making the text throws
+// append a value's text as a field, or an empty field when making the text throws
 static int write_text(JSValueConst value)
 {
 	size_t length;
@@ -113,7 +113,7 @@ static int write_property(JSValueConst error, const char *name)
 }
 
 // Write the pending exception as 3 fields: name, message, and stack
-// a thrown value that is not an Error has n empty name, its text as the message and an empty stack
+// a thrown value that is not an Error has an empty name, its text as the message and an empty stack
 static int write_error(void)
 {
 	JSValue error = JS_GetException(context);
@@ -223,7 +223,7 @@ int arc_start(uint32_t limit)
 		return -1;
 	memory_limit = limit;
 	JS_SetMemoryLimit(runtime, memory_limit);
-	JS_SetMaxStackSize(runtime, ARC_STACK_LIMIT);
+	JS_SetMaxStackSize(runtime, ARC_STACK_LIMIT); // ! the release defaults to 1 MiB, which is more than the whole shadow stack, so without this the limit lands below address 0 and every call overflows
 	JS_SetInterruptHandler(runtime, interrupt, NULL);
 	context = JS_NewContext(runtime);
 	if (context == NULL)
@@ -231,16 +231,16 @@ int arc_start(uint32_t limit)
 	return 0;
 }
 
-// return an input buffer of atleast size bytes or null when no memory
+// return an input buffer of at least size bytes or null when no memory
 char *arc_input(uint32_t size)
 {
 	return reserve(&input, &input_capacity, size) ? input : NULL;
 }
 
-// Run the script in the input buffer as a global script and write its output to the output buffer
-// returns 0 for a value, 1 for an error, 2 for an outcome that couldnt be written, and  3 for a timeout
-// the input holds nul byte, source, and another nul byte since JS_Eval needs to be terminated
-// The source may hold nul chars of its own bc its lenght is passed
+// Run the script in the input buffer as a global script and write its outcome to the output buffer
+// returns 0 for a value, 1 for an error, 2 for an outcome that couldn't be written, and 3 for a timeout
+// the input holds the name, a nul byte, the source, and another nul byte since JS_Eval needs both terminated
+// The source may hold nul chars of its own because its length is passed
 int arc_run(uint32_t name_length, uint32_t source_length)
 {
 	const char *name = input;
@@ -273,7 +273,7 @@ int arc_run(uint32_t name_length, uint32_t source_length)
 	return written ? ARC_ERROR : ARC_UNREADABLE;
 }
 
-// Every run overrides the previous
+// Every run overwrites the previous
 const char *arc_output(void)
 {
 	return output;

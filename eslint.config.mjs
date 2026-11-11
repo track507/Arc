@@ -48,6 +48,7 @@ export default defineConfig(
 				{ selector: "method", format: ["camelCase"] },
 				{ selector: "property", format: ["camelCase", "PascalCase", "UPPER_CASE"], leadingUnderscore: "allow" },
 				{ selector: "property", modifiers: ["requiresQuotes"], format: null },
+				// ? the engine's C entry points keep their C names, plus the leading underscore Emscripten puts on every export
 				{
 					selector: ["typeProperty", "typeMethod", "objectLiteralProperty", "objectLiteralMethod"],
 					filter: { regex: "^_arc_[a-z_]+$", match: true },

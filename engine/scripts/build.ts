@@ -1,8 +1,8 @@
-import { spawn } from "child_process";
-import { createHash } from "crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { basename, join } from "path";
-import { fileURLToPath } from "url";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { emccCommand } from "./emsdk.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -13,13 +13,16 @@ const objects = join(dist, "obj");
 
 const release = JSON.parse(readFileSync(join(engine, "release.json"), "utf8")) as { readonly version: string };
 
-// library files and the c entry point
+// library files and the C entry point
 const SOURCES = [
 	...["quickjs", "libregexp", "libunicode", "cutils", "dtoa"].map((name) => join(engine, "quickjs", `${name}.c`)),
 	join(engine, "src", "arc-engine.c"),
 ];
-const STACK_LIMIT = 32 * 1024; // the engines stack limit in bytes of the shadow stack
-const STACK_SIZE = 8 * STACK_LIMIT; // shadow stacks size in bytes, 8 x the limit so the check fires before the stacks bottom
+// ? some native paths like JSON.stringify on nested arrays use little shadow stack but a lot of the host's, and at 44 KB that blew a Chromium Worker's stack before the check fired
+// ? a sheet's session needs 10 to 12 KB, so 32 KB gives it room and stays under every host measured
+const STACK_LIMIT = 32 * 1024; // the engine's stack limit in bytes of the shadow stack
+// ? the biggest single frame in the engine is under 1 KB, so a run can't jump from above the limit to past the bottom
+const STACK_SIZE = 8 * STACK_LIMIT; // shadow stack's size in bytes, 8 x the limit so the check fires before the stack's bottom
 const COMPILE = [
 	"-O2",
 	"-D_GNU_SOURCE",
@@ -41,7 +44,7 @@ const LINK = [
 	"-sINITIAL_MEMORY=32MB",
 	"-sMAXIMUM_MEMORY=256MB",
 	`-sSTACK_SIZE=${String(STACK_SIZE)}`,
-	"-Wl,--stack-first",
+	"-Wl,--stack-first", // ? puts the stack below the static data, so running off its bottom traps instead of writing over that data
 	"-sFILESYSTEM=0",
 	`-sEXPORTED_FUNCTIONS=${EXPORTS.join(",")}`,
 	"-sEXPORTED_RUNTIME_METHODS=HEAPU8",

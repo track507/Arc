@@ -50,7 +50,7 @@ export default {
 		},
 	],
 	options: {
-		doNotFollow: { path: ["node_modules", "^engine/dist/"] },
+		doNotFollow: { path: ["node_modules", "^engine/dist/"] }, // ? engine/dist is the loader Emscripten generates, not part of arc's own code
 		tsPreCompilationDeps: true,
 		enhancedResolveOptions: {
 			exportsFields: ["exports"],
