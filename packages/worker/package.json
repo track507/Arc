@@ -7,7 +7,8 @@
 		"typecheck": "tsc -p ."
 	},
 	"dependencies": {
-		"@arc/core": "workspace:*"
+		"@arc/core": "workspace:*",
+		"@arc/engine": "workspace:*"
 	},
 	"devDependencies": {
 		"typescript": "catalog:",

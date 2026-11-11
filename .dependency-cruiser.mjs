@@ -40,9 +40,17 @@ export default {
 			from: { path: "^packages/([^/]+)/src/", pathNot: "/src/entry\\.ts$" },
 			to: { path: "^packages/(?!core/)[^/]+/src/", pathNot: "^packages/$1/src/" },
 		},
+		{
+			name: "only-the-entry-and-the-runtime-adapter-load-the-engine",
+			comment:
+				"The rest of Arc runs scripts through the script runtime port, so only the entry that chooses the engine and the adapter that wraps it import @arc/engine",
+			severity: "error",
+			from: { path: "^packages/[^/]+/src/", pathNot: ["/src/entry\\.ts$", "^packages/worker/src/runtime/quickjs-runtime\\.ts$"] },
+			to: { path: "^engine/" },
+		},
 	],
 	options: {
-		doNotFollow: { path: "node_modules" },
+		doNotFollow: { path: ["node_modules", "^engine/dist/"] },
 		tsPreCompilationDeps: true,
 		enhancedResolveOptions: {
 			exportsFields: ["exports"],

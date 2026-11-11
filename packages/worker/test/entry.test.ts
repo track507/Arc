@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { chooseClock } from "../src/entry.ts";
+import { chooseClock, chooseRuntime } from "../src/entry.ts";
 
 const SPRING_AFTER = Date.UTC(2026, 2, 8, 7, 0);
 const builtIn = Object.getOwnPropertyDescriptor(globalThis, "Temporal");
@@ -24,5 +24,12 @@ describe("chooseClock", () => {
 		vi.stubEnv("TZ", "America/New_York");
 		Reflect.deleteProperty(globalThis, "Temporal");
 		expect(chooseClock().timezoneOffset(SPRING_AFTER)).toBe(240);
+	});
+});
+
+describe("chooseRuntime", () => {
+	it("runs scripts on the engine built from the release", async () => {
+		const runtime = await chooseRuntime();
+		expect(await runtime.run({ name: "sum.js", source: "1 + 1" })).toEqual({ kind: "value", text: "2" });
 	});
 });

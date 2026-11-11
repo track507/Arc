@@ -247,6 +247,9 @@ importers:
       '@arc/core':
         specifier: workspace:*
         version: link:../core
+      '@arc/engine':
+        specifier: workspace:*
+        version: link:../../engine
     devDependencies:
       typescript:
         specifier: 'catalog:'
