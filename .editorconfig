@@ -27,3 +27,14 @@ indent_size = unset
 insert_final_newline = unset
 trim_trailing_whitespace = unset
 max_line_length = unset
+
+# ! A patch's find and replace are C text that must match the release byte for byte, trailing spaces included
+[engine/patches/*.ts]
+trim_trailing_whitespace = false
+
+# ? quickjs-ng's license notice ships as quickjs-ng wrote it
+[engine/patches/LICENSE-quickjs-ng]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

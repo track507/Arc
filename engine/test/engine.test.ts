@@ -1,32 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { ArcEngine } from "@arc/engine";
-import createArcEngine from "@arc/engine";
 
-interface Raw {
-	readonly code: number;
-	readonly parts: readonly string[];
-}
+import { distFolder, loadEngine, run } from "../scripts/drive.ts";
 
 const MEMORY_LIMIT = 16 * 1024 * 1024;
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-function run(engine: ArcEngine, name: string, source: string): Raw {
-	const bytes = encoder.encode(`${name}\0${source}\0`);
-	const nameLength = encoder.encode(name).length;
-	const input = engine._arc_input(bytes.length);
-	engine.HEAPU8.set(bytes, input);
-	const code = engine._arc_run(nameLength, bytes.length - nameLength - 2);
-	const start = engine._arc_output();
-	const end = start + engine._arc_output_length();
-	const view = new DataView(engine.HEAPU8.buffer);
-	const parts: string[] = [];
-	for (let at = start; at < end; at += 4 + view.getUint32(at, true)) {
-		parts.push(decoder.decode(engine.HEAPU8.subarray(at + 4, at + 4 + view.getUint32(at, true))));
-	}
-	return { code, parts };
-}
+const createArcEngine = await loadEngine<ArcEngine>(distFolder());
 
 let engine: ArcEngine;
 let stopping = false;
@@ -41,6 +20,13 @@ describe("the engine's C entry points", () => {
 	it("exports every entry point arc-engine.d.ts declares", () => {
 		for (const name of ["_arc_start", "_arc_input", "_arc_run", "_arc_output", "_arc_output_length"] as const) {
 			expect(engine[name]).toBeTypeOf("function");
+		}
+	});
+
+	it("exports no part of the fault hook, which only the fault build carries", () => {
+		const exports = engine as unknown as Readonly<Record<string, unknown>>;
+		for (const name of ["_arc_fail_at", "_arc_allocations", "_arc_live_blocks"]) {
+			expect(exports[name]).toBeUndefined();
 		}
 	});
 

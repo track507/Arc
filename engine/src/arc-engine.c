@@ -134,6 +134,44 @@ static int write_error(void)
 /** What malloc spends on a block beyond its usable size, as the release's allocator counts it */
 #define BLOCK_OVERHEAD 8
 
+// * The fault hook
+// ? Only the fault build compiles it, with ARC_FAULTS, and engine/scripts/compile.ts names the entry points that build exports
+// ? A test makes the nth allocation from now fail, which reaches a fault that waits on one exact allocation failing, on every run
+// ? The fault build also sets __SANITIZE_ADDRESS__, which makes the release send every allocation here instead of serving small blocks from arenas of its own
+
+#ifdef ARC_FAULTS
+static uint32_t fail_countdown;
+static uint32_t allocations;
+
+/** Counts an allocation and answers whether it is the one set to fail */
+static int fail_now(void)
+{
+	allocations++;
+	if (fail_countdown == 0)
+		return 0;
+	return --fail_countdown == 0;
+}
+
+/** Makes the nth allocation from now fail, a malloc or a realloc that grows its block, or none with 0, and starts the count again */
+void arc_fail_at(uint32_t n)
+{
+	fail_countdown = n;
+	allocations = 0;
+}
+
+/** The allocations since the last arc_fail_at */
+uint32_t arc_allocations(void)
+{
+	return allocations;
+}
+#else
+/** The product build fails no allocation of its own */
+static inline int fail_now(void)
+{
+	return 0;
+}
+#endif
+
 /** A block's usable size, which malloc may round up from the size asked for */
 static size_t block_size(const void *block)
 {
@@ -147,6 +185,8 @@ static size_t block_size(const void *block)
  */
 static void *limited_malloc(JSMallocState *state, size_t size)
 {
+	if (fail_now())
+		return NULL;
 	if (state->malloc_size + size > state->malloc_limit)
 		return NULL;
 	void *block = malloc(size);
@@ -178,6 +218,8 @@ static void *limited_realloc(JSMallocState *state, void *block, size_t size)
 		return NULL;
 	}
 	size_t old_size = block_size(block);
+	if (size > old_size && fail_now())
+		return NULL;
 	if (state->malloc_size + size - old_size > state->malloc_limit)
 		return NULL;
 	void *resized = realloc(block, size);
@@ -283,3 +325,14 @@ uint32_t arc_output_length(void)
 {
 	return output_length;
 }
+
+#ifdef ARC_FAULTS
+/** The blocks the runtime holds after a full collection, which a leaked block raises by one */
+uint32_t arc_live_blocks(void)
+{
+	JSMemoryUsage usage;
+	JS_RunGC(runtime);
+	JS_ComputeMemoryUsage(runtime, &usage);
+	return (uint32_t)usage.malloc_count;
+}
+#endif
