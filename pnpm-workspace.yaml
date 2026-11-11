@@ -2,6 +2,7 @@ packages:
   - packages/*
   - drivers/*
   - tools/*
+  - engine
 
 allowBuilds:
   lefthook: true

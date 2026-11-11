@@ -20,3 +20,10 @@ trim_trailing_whitespace = false
 indent_style = space
 indent_size = 4
 max_line_length = off
+
+[engine/quickjs/**]
+indent_style = unset
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+max_line_length = unset
