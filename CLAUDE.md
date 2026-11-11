@@ -28,6 +28,7 @@ Rules for agents working in Arc's repository
 
 - `packages/core` holds the model and the policy, with its ports; it does no I/O and reads time only through the Clock port
 - `packages/worker` holds the engine Worker's entry, which chooses the adapters, and the adapters it chooses
+- `engine` holds the QuickJS release as it shipped, Arc's C composition root in `engine/src`, and the scripts that fetch the SDK and build the wasm
 - `tools/gate` holds the names check
 - `pnpm boundaries` enforces the rules in `.dependency-cruiser.mjs`
 
