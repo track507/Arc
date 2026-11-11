@@ -11,9 +11,12 @@
 		"pnpm": ">=12.16.1"
 	},
 	"scripts": {
-		"boundaries": "depcruise packages tools engine/scripts engine/test --config .dependency-cruiser.mjs",
+		"boundaries": "depcruise packages tools engine/scripts engine/test engine/patches --config .dependency-cruiser.mjs",
 		"build:engine": "node engine/scripts/build.ts",
 		"check": "pnpm run format:check && pnpm run lint && pnpm run lint:md && pnpm run typecheck && pnpm run build:engine && pnpm run boundaries && pnpm run test && pnpm run names",
+		"engine:check-upgrade": "node engine/scripts/check-upgrade.ts",
+		"engine:record-size": "node engine/scripts/record-size.ts",
+		"engine:sweep": "node engine/scripts/sweep.ts",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"lint": "eslint .",

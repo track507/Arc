@@ -48,6 +48,20 @@ export default {
 			from: { path: "^packages/[^/]+/src/", pathNot: ["/src/entry\\.ts$", "^packages/worker/src/runtime/quickjs-runtime\\.ts$"] },
 			to: { path: "^engine/" },
 		},
+		{
+			name: "only-engine-tests-import-the-fault-build",
+			comment: "The fault build carries a hook that fails allocations on demand and never ships, so nothing but the engine's tests imports it",
+			severity: "error",
+			from: { pathNot: "^engine/test/" },
+			to: { path: "^engine/dist/fault/" },
+		},
+		{
+			name: "patches-import-only-the-patch-type",
+			comment: "A patch is data the chain applies, so it imports the Patch type and nothing else",
+			severity: "error",
+			from: { path: "^engine/patches/" },
+			to: { pathNot: ["^engine/patches/", "^engine/scripts/patches\\.ts$"] },
+		},
 	],
 	options: {
 		doNotFollow: { path: ["node_modules", "^engine/dist/"] }, // ? engine/dist is the loader Emscripten generates, not part of arc's own code
